@@ -241,12 +241,28 @@ function NameTags:Update()
     local entities = EntityInfo.GetAllEntities()
     local entityModels = {}
     
-    -- Find entity models in workspace
+    -- Debug count
+    local entitiesFound = #entities
+    local modelsFound = 0
+    local tagsCreated = 0
+    
+    -- Find entity models in workspace - more thorough method
     local spawnedEntities = workspace:FindFirstChild("SpawnedEntities")
     if spawnedEntities then
         for _, child in ipairs(spawnedEntities:GetChildren()) do
             if child:FindFirstChildOfClass("Humanoid") then
                 entityModels[child.Name] = child
+                modelsFound = modelsFound + 1
+            end
+        end
+    end
+    
+    -- If we didn't find any specific container, try the whole workspace as fallback
+    if modelsFound == 0 then
+        for _, child in ipairs(workspace:GetChildren()) do
+            if child:FindFirstChildOfClass("Humanoid") then
+                entityModels[child.Name] = child
+                modelsFound = modelsFound + 1
             end
         end
     end
@@ -255,16 +271,51 @@ function NameTags:Update()
     local existingEntities = {}
     
     -- Create or update tags
-    for _, entity in ipairs(entities) do
+    for i, entity in ipairs(entities) do
         existingEntities[entity.Name] = true
         
         -- Get model for this entity
         local model = entityModels[entity.Name]
-        if not model then continue end
+        
+        -- Try alternate ways to find the model if not found directly
+        if not model then
+            -- Try finding it by looking for a model with matching health values
+            for name, potentialModel in pairs(entityModels) do
+                local humanoid = potentialModel:FindFirstChildOfClass("Humanoid")
+                if humanoid and math.abs(humanoid.Health - entity.Health) < 1 and 
+                   math.abs(humanoid.MaxHealth - entity.MaxHealth) < 1 then
+                    model = potentialModel
+                    break
+                end
+            end
+        end
+        
+        -- Still no model, try one last approach - look for any model that has this entity's name as a substring
+        if not model then
+            for name, potentialModel in pairs(entityModels) do
+                if string.find(name, entity.Name) or string.find(entity.Name, name) then
+                    model = potentialModel
+                    break
+                end
+            end
+        end
+        
+        if not model then 
+            -- Print debug info to console about this entity
+            print("Could not find model for entity: " .. entity.Name)
+            continue 
+        end
+        
+        -- Ensure HumanoidRootPart exists before creating tag
+        if not model:FindFirstChild("HumanoidRootPart") then
+            print("No HumanoidRootPart found for: " .. entity.Name)
+            continue
+        end
         
         -- Create tag if it doesn't exist
         if not activeTags[entity.Name] then
             self:CreateNameTag(entity, model)
+            tagsCreated = tagsCreated + 1
         end
         
         -- Update existing tag
@@ -276,6 +327,15 @@ function NameTags:Update()
         if not existingEntities[entityName] then
             self:RemoveNameTag(entityName)
         end
+    end
+    
+    -- Output debug info once
+    if self.firstUpdate then
+        print("Name Tags Debug:")
+        print("- Entities found in API: " .. entitiesFound)
+        print("- Entity models found: " .. modelsFound)
+        print("- Tags successfully created: " .. tagsCreated)
+        self.firstUpdate = false
     end
 end
 
@@ -325,6 +385,7 @@ end
 -- Initialize
 NameTags.enabled = false
 NameTags.lastUpdate = 0
+NameTags.firstUpdate = true  -- For debug info
 
 -- Add keyboard toggle (press N to toggle name tags)
 local UserInputService = game:GetService("UserInputService")
