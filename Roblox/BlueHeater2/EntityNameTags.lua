@@ -9,7 +9,7 @@ local LocalPlayer = Players.LocalPlayer
 if not _G.BlueHeaterAPI then
     -- Try to load the API if not already present
     pcall(function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/k1nnx/Cursor/refs/heads/main/Roblox/BlueHeater2/Info.lua?token=GHSAT0AAAAAAC74ORH2WILUTATNVZHDTJJAZ6GIVUA"))()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/k1nnx/Cursor/refs/heads/main/Roblox/BlueHeater2/Info.lua?token=GHSAT0AAAAAAC74ORH3ZPIOFRELBCYCSVO4Z6GJZ7A"))()
     end)
     
     if not _G.BlueHeaterAPI then
@@ -54,6 +54,13 @@ local config = {
 local NameTags = {}
 local activeTags = {}
 
+-- Print debug message
+local function debugPrint(...)
+    if config.debug then
+        print("[NameTags]", ...)
+    end
+end
+
 -- Get rarity color based on entity level
 local function getRarityColor(entity)
     if not entity.Drops or not entity.Drops.Level then
@@ -90,16 +97,84 @@ local function formatValue(value)
     end
 end
 
--- Create a new name tag for an entity
-function NameTags:CreateNameTag(entity, model)
+-- Find entities directly in the workspace
+local function findEntitiesInWorkspace()
+    local entities = {}
+    local function searchFolder(folder)
+        for _, child in ipairs(folder:GetChildren()) do
+            if child:FindFirstChildOfClass("Humanoid") then
+                entities[#entities+1] = child
+            end
+            if #child:GetChildren() > 0 and not child:FindFirstChildOfClass("Humanoid") then
+                searchFolder(child)
+            end
+        end
+    end
+    
+    -- Check for a SpawnedEntities folder first
+    local spawnedEntities = workspace:FindFirstChild("SpawnedEntities")
+    if spawnedEntities then
+        searchFolder(spawnedEntities)
+    else
+        -- If no specific folder, search the whole workspace
+        searchFolder(workspace)
+    end
+    
+    return entities
+end
+
+-- Create a new name tag for an entity model
+function NameTags:CreateNameTagForModel(model)
     -- Check if already has a tag
-    if activeTags[entity.Name] then
+    if activeTags[model.Name] then
         return
     end
     
-    -- Find the HumanoidRootPart to attach to
-    local humanoidRootPart = model:FindFirstChild("HumanoidRootPart")
-    if not humanoidRootPart then return end
+    -- Find the HumanoidRootPart or primary part to attach to
+    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    
+    local attachPart = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model.PrimaryPart
+    if not attachPart then
+        for _, part in ipairs(model:GetChildren()) do
+            if part:IsA("BasePart") then
+                attachPart = part
+                break
+            end
+        end
+    end
+    if not attachPart then return end
+    
+    -- Create entity data from model
+    local entityData = {
+        Name = model.Name,
+        Health = humanoid.Health,
+        MaxHealth = humanoid.MaxHealth,
+        Position = model:GetPivot(),
+        Drops = {},
+        Resistances = {}
+    }
+    
+    -- Try to find Info object for additional data
+    local infoFolder = model:FindFirstChild("Info")
+    if infoFolder then
+        local drops = infoFolder:FindFirstChild("Drops")
+        if drops then
+            entityData.Drops = {
+                Level = {
+                    Min = drops:GetAttribute("Level") and drops:GetAttribute("Level").Min or 1,
+                    Max = drops:GetAttribute("Level") and drops:GetAttribute("Level").Max or 5
+                }
+            }
+        end
+        
+        local resistances = infoFolder:FindFirstChild("Resistances")
+        if resistances then
+            for _, resistance in ipairs(resistances:GetChildren()) do
+                entityData.Resistances[resistance.Name] = resistance.Value
+            end
+        end
+    end
     
     -- Create Billboard
     local billboard = Instance.new("BillboardGui")
@@ -108,7 +183,7 @@ function NameTags:CreateNameTag(entity, model)
     billboard.StudsOffset = Vector3.new(0, config.tagHeight, 0)
     billboard.AlwaysOnTop = true
     billboard.MaxDistance = config.maxViewDistance
-    billboard.Adornee = humanoidRootPart
+    billboard.Adornee = attachPart
     
     -- Container frame
     local mainFrame = Instance.new("Frame")
@@ -122,12 +197,12 @@ function NameTags:CreateNameTag(entity, model)
     nameLabel.Name = "NameLabel"
     nameLabel.Size = UDim2.new(1, 0, 0, config.fontSize + 4)
     nameLabel.BackgroundTransparency = 1
-    nameLabel.TextColor3 = getRarityColor(entity)
+    nameLabel.TextColor3 = getRarityColor(entityData)
     nameLabel.TextStrokeTransparency = 0.5
     nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     nameLabel.TextSize = config.fontSize + 2
     nameLabel.Font = Enum.Font.SourceSansBold
-    nameLabel.Text = entity.Name
+    nameLabel.Text = entityData.Name
     nameLabel.Parent = mainFrame
     
     -- Health bar background
@@ -142,7 +217,7 @@ function NameTags:CreateNameTag(entity, model)
     -- Health bar
     local healthBar = Instance.new("Frame")
     healthBar.Name = "HealthBar"
-    healthBar.Size = UDim2.new(entity.Health / entity.MaxHealth, 0, 1, 0)
+    healthBar.Size = UDim2.new(entityData.Health / entityData.MaxHealth, 0, 1, 0)
     healthBar.BackgroundColor3 = config.healthBarColor
     healthBar.BorderSizePixel = 0
     healthBar.Parent = healthBarBg
@@ -158,7 +233,7 @@ function NameTags:CreateNameTag(entity, model)
     healthText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     healthText.TextSize = config.fontSize
     healthText.Font = Enum.Font.SourceSans
-    healthText.Text = formatValue(entity.Health) .. "/" .. formatValue(entity.MaxHealth)
+    healthText.Text = formatValue(entityData.Health) .. "/" .. formatValue(entityData.MaxHealth)
     healthText.Parent = mainFrame
     
     -- Info text (distance, level, etc.)
@@ -172,57 +247,107 @@ function NameTags:CreateNameTag(entity, model)
     infoText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     infoText.TextSize = config.fontSize - 2
     infoText.Font = Enum.Font.SourceSans
-    infoText.Text = ""
-    infoText.Parent = mainFrame
-    
-    -- Store in active tags
-    activeTags[entity.Name] = {
-        billboard = billboard,
-        nameLabel = nameLabel,
-        healthBar = healthBar,
-        healthText = healthText,
-        infoText = infoText,
-        entityName = entity.Name
-    }
-    
-    -- Parent billboard to PlayerGui
-    billboard.Parent = LocalPlayer.PlayerGui
-    
-    return billboard
-end
-
--- Update a name tag with current entity info
-function NameTags:UpdateNameTag(entity, tag)
-    if not tag then return end
-    
-    -- Update health bar
-    tag.healthBar.Size = UDim2.new(entity.Health / entity.MaxHealth, 0, 1, 0)
-    tag.healthText.Text = formatValue(entity.Health) .. "/" .. formatValue(entity.MaxHealth)
     
     -- Calculate distance
     local distance = "N/A"
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local playerPos = LocalPlayer.Character.HumanoidRootPart.Position
-        local entityPos = entity.Position.Position
+        local entityPos = attachPart.Position
         distance = string.format("%.1f", (playerPos - entityPos).Magnitude)
     end
     
     -- Update info text
     local infoString = ""
-    
     if config.showDistance then
         infoString = infoString .. distance .. " studs"
     end
     
-    if config.showLevel and entity.Drops and entity.Drops.Level then
+    if config.showLevel and entityData.Drops and entityData.Drops.Level then
         if infoString ~= "" then infoString = infoString .. " | " end
-        infoString = infoString .. "Lvl " .. entity.Drops.Level.Min .. "-" .. entity.Drops.Level.Max
+        infoString = infoString .. "Lvl " .. entityData.Drops.Level.Min .. "-" .. entityData.Drops.Level.Max
+    end
+    
+    infoText.Text = infoString
+    infoText.Parent = mainFrame
+    
+    -- Store in active tags
+    activeTags[model.Name] = {
+        billboard = billboard,
+        nameLabel = nameLabel,
+        healthBar = healthBar,
+        healthText = healthText,
+        infoText = infoText,
+        model = model,
+        humanoid = humanoid,
+        attachPart = attachPart
+    }
+    
+    -- Parent billboard to PlayerGui
+    billboard.Parent = LocalPlayer.PlayerGui
+    
+    debugPrint("Created tag for:", model.Name)
+    return billboard
+end
+
+-- Update an existing name tag
+function NameTags:UpdateNameTag(tag)
+    if not tag or not tag.model or not tag.model.Parent then
+        -- Model was destroyed
+        self:RemoveNameTag(tag.model.Name)
+        return
+    end
+    
+    local model = tag.model
+    local humanoid = tag.humanoid
+    
+    if not humanoid or not humanoid.Parent then
+        self:RemoveNameTag(model.Name)
+        return
+    end
+    
+    -- Update health bar
+    local healthRatio = humanoid.Health / humanoid.MaxHealth
+    tag.healthBar.Size = UDim2.new(healthRatio, 0, 1, 0)
+    tag.healthText.Text = formatValue(humanoid.Health) .. "/" .. formatValue(humanoid.MaxHealth)
+    
+    -- Update color based on level/rarity
+    local entityData = {
+        Drops = {}
+    }
+    
+    local infoFolder = model:FindFirstChild("Info")
+    if infoFolder then
+        local drops = infoFolder:FindFirstChild("Drops")
+        if drops then
+            entityData.Drops.Level = {
+                Min = drops:GetAttribute("Level") and drops:GetAttribute("Level").Min or 1,
+                Max = drops:GetAttribute("Level") and drops:GetAttribute("Level").Max or 5
+            }
+        end
+    end
+    
+    tag.nameLabel.TextColor3 = getRarityColor(entityData)
+    
+    -- Calculate distance
+    local distance = "N/A"
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and tag.attachPart then
+        local playerPos = LocalPlayer.Character.HumanoidRootPart.Position
+        local entityPos = tag.attachPart.Position
+        distance = string.format("%.1f", (playerPos - entityPos).Magnitude)
+    end
+    
+    -- Update info text
+    local infoString = ""
+    if config.showDistance then
+        infoString = infoString .. distance .. " studs"
+    end
+    
+    if config.showLevel and entityData.Drops and entityData.Drops.Level then
+        if infoString ~= "" then infoString = infoString .. " | " end
+        infoString = infoString .. "Lvl " .. entityData.Drops.Level.Min .. "-" .. entityData.Drops.Level.Max
     end
     
     tag.infoText.Text = infoString
-    
-    -- Update color based on rarity
-    tag.nameLabel.TextColor3 = getRarityColor(entity)
 end
 
 -- Remove a name tag
@@ -237,89 +362,33 @@ end
 
 -- Main update function
 function NameTags:Update()
-    -- Get all entities
-    local entities = EntityInfo.GetAllEntities()
-    local entityModels = {}
+    -- Find all entity models in the workspace
+    local entityModels = findEntitiesInWorkspace()
+    local modelCount = #entityModels
     
-    -- Debug count
-    local entitiesFound = #entities
-    local modelsFound = 0
+    if modelCount == 0 then
+        print("No entity models found in workspace")
+        return
+    end
+    
+    -- Track entities that still exist to remove old ones
+    local existingEntities = {}
     local tagsCreated = 0
     
-    -- Find entity models in workspace - more thorough method
-    local spawnedEntities = workspace:FindFirstChild("SpawnedEntities")
-    if spawnedEntities then
-        for _, child in ipairs(spawnedEntities:GetChildren()) do
-            if child:FindFirstChildOfClass("Humanoid") then
-                entityModels[child.Name] = child
-                modelsFound = modelsFound + 1
-            end
-        end
-    end
-    
-    -- If we didn't find any specific container, try the whole workspace as fallback
-    if modelsFound == 0 then
-        for _, child in ipairs(workspace:GetChildren()) do
-            if child:FindFirstChildOfClass("Humanoid") then
-                entityModels[child.Name] = child
-                modelsFound = modelsFound + 1
-            end
-        end
-    end
-    
-    -- Track existing entities to remove ones that no longer exist
-    local existingEntities = {}
-    
-    -- Create or update tags
-    for i, entity in ipairs(entities) do
-        existingEntities[entity.Name] = true
-        
-        -- Get model for this entity
-        local model = entityModels[entity.Name]
-        
-        -- Try alternate ways to find the model if not found directly
-        if not model then
-            -- Try finding it by looking for a model with matching health values
-            for name, potentialModel in pairs(entityModels) do
-                local humanoid = potentialModel:FindFirstChildOfClass("Humanoid")
-                if humanoid and math.abs(humanoid.Health - entity.Health) < 1 and 
-                   math.abs(humanoid.MaxHealth - entity.MaxHealth) < 1 then
-                    model = potentialModel
-                    break
-                end
-            end
-        end
-        
-        -- Still no model, try one last approach - look for any model that has this entity's name as a substring
-        if not model then
-            for name, potentialModel in pairs(entityModels) do
-                if string.find(name, entity.Name) or string.find(entity.Name, name) then
-                    model = potentialModel
-                    break
-                end
-            end
-        end
-        
-        if not model then 
-            -- Print debug info to console about this entity
-            print("Could not find model for entity: " .. entity.Name)
-            continue 
-        end
-        
-        -- Ensure HumanoidRootPart exists before creating tag
-        if not model:FindFirstChild("HumanoidRootPart") then
-            print("No HumanoidRootPart found for: " .. entity.Name)
-            continue
-        end
+    -- Create or update tags for each model
+    for _, model in ipairs(entityModels) do
+        existingEntities[model.Name] = true
         
         -- Create tag if it doesn't exist
-        if not activeTags[entity.Name] then
-            self:CreateNameTag(entity, model)
+        if not activeTags[model.Name] then
+            self:CreateNameTagForModel(model)
             tagsCreated = tagsCreated + 1
         end
         
         -- Update existing tag
-        self:UpdateNameTag(entity, activeTags[entity.Name])
+        if activeTags[model.Name] then
+            self:UpdateNameTag(activeTags[model.Name])
+        end
     end
     
     -- Remove tags for entities that no longer exist
@@ -332,9 +401,8 @@ function NameTags:Update()
     -- Output debug info once
     if self.firstUpdate then
         print("Name Tags Debug:")
-        print("- Entities found in API: " .. entitiesFound)
-        print("- Entity models found: " .. modelsFound)
-        print("- Tags successfully created: " .. tagsCreated)
+        print("- Entity models found: " .. modelCount)
+        print("- Tags created: " .. tagsCreated)
         self.firstUpdate = false
     end
 end
@@ -358,11 +426,15 @@ function NameTags:Toggle()
         for _, tag in pairs(activeTags) do
             tag.billboard.Enabled = true
         end
+        
+        print("Name tags enabled")
     else
         -- Hide existing tags
         for _, tag in pairs(activeTags) do
             tag.billboard.Enabled = false
         end
+        
+        print("Name tags disabled")
     end
     
     return self.enabled
@@ -401,8 +473,16 @@ UserInputService.InputBegan:Connect(function(input)
     end
 end)
 
--- Start enabled by default
-NameTags:Toggle()
+-- Force a direct update call to debug any issues
+spawn(function()
+    wait(1) -- Wait a second for everything to load
+    print("EntityNameTags: Starting initial scan...")
+    NameTags:Update()
+    print("EntityNameTags: Initial scan complete")
+    
+    -- Start enabled by default
+    NameTags:Toggle()
+end)
 
 -- Return the module for API access
 return NameTags 
