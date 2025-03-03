@@ -1,61 +1,67 @@
-local children = workspace:WaitForChild("SpawnedEntities"):GetChildren()
+local function GetEntityInfo()
+    local entityInfos = {}
+    local children = workspace:WaitForChild("SpawnedEntities"):GetChildren()
 
-for _, entity in ipairs(children) do
-    local humanoid = entity:FindFirstChildOfClass("Humanoid")
-    if humanoid then
-        local info = entity:FindFirstChild("Info")
-        local position = entity.WorldPivot
-        
-        print("Entity:", entity.Name)
-        print("Health:", humanoid.Health .. "/" .. humanoid.MaxHealth)
-        print("Position:", tostring(position))
-        
-        if info then
-            local drops = info:FindFirstChild("Drops")
-            local resistances = info:FindFirstChild("Resistances")
-            local values = info:FindFirstChild("Values")
+    for _, entity in ipairs(children) do
+        local humanoid = entity:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            local entityData = {
+                Name = entity.Name,
+                Health = humanoid.Health,
+                MaxHealth = humanoid.MaxHealth,
+                Position = entity.WorldPivot,
+                Drops = {},
+                Resistances = {},
+                Values = {}
+            }
             
-            if drops then
-                local coins = drops:GetAttribute("Coins")
-                local coinsChance = drops:GetAttribute("CoinsChance")
-                local experience = drops:GetAttribute("Experience")
-                local level = drops:GetAttribute("Level")
-                local dropItems = drops:GetChildren()
+            local info = entity:FindFirstChild("Info")
+            if info then
+                local drops = info:FindFirstChild("Drops")
+                local resistances = info:FindFirstChild("Resistances")
+                local values = info:FindFirstChild("Values")
                 
-                print("----")
-                print("CoinsMin:", coins.Min)
-                print("CoinsMax:", coins.Max)
-                print("CoinsChance:", coinsChance)
-                print("----")
-                print("ExperienceMin:", experience.Min)
-                print("ExperienceMax:", experience.Max)
-                print("----")
-                print("LevelMin:", level.Min)
-                print("LevelMax:", level.Max)
-                print("----")
-                
-                print("Drops:")
-                for _, drop in ipairs(dropItems) do
-                    print(drop.Name)
+                if drops then
+                    entityData.Drops = {
+                        Coins = {
+                            Min = drops:GetAttribute("Coins").Min,
+                            Max = drops:GetAttribute("Coins").Max,
+                            Chance = drops:GetAttribute("CoinsChance")
+                        },
+                        Experience = {
+                            Min = drops:GetAttribute("Experience").Min,
+                            Max = drops:GetAttribute("Experience").Max
+                        },
+                        Level = {
+                            Min = drops:GetAttribute("Level").Min,
+                            Max = drops:GetAttribute("Level").Max
+                        },
+                        Items = {}
+                    }
+                    
+                    for _, drop in ipairs(drops:GetChildren()) do
+                        table.insert(entityData.Drops.Items, drop.Name)
+                    end
                 end
-                print("----")
+                
+                if resistances then
+                    for _, resistance in ipairs(resistances:GetChildren()) do
+                        entityData.Resistances[resistance.Name] = resistance.Value
+                    end
+                end
+            
+                if values then
+                    for _, value in ipairs(values:GetChildren()) do
+                        entityData.Values[value.Name] = value.Value
+                    end
+                end
             end
             
-            if resistances then
-                print("Resistances:")
-                for _, resistance in ipairs(resistances:GetChildren()) do
-                    print(resistance.Name .. ": " .. resistance.Value)
-                end
-                print("----")
-            end
-        
-            if values then
-                print("Values:")
-                for _, value in ipairs(values:GetChildren()) do
-                    print(value.Name .. ": " .. tostring(value.Value))
-                end
-            end
+            table.insert(entityInfos, entityData)
         end
-        print("--------------------------------")
     end
+    
+    return entityInfos
 end
+
+return GetEntityInfo()
