@@ -42,12 +42,20 @@ local function GetClosestEntityInfo()
         return nil
     end
     
+    -- Get Humanoid reference for easy access
+    local humanoid = closestEntity:FindFirstChildOfClass("Humanoid")
+    if not humanoid then
+        warn("Humanoid not found in closest entity")
+        return nil
+    end
+    
     -- Extract info from closest entity
     local entityInfo = {
         Name = closestEntity.Name,
         Distance = closestDistance,
-        Health = closestEntity.Humanoid.Health,
-        MaxHealth = closestEntity.Humanoid.MaxHealth,
+        -- Get health directly from the Humanoid object, not from Info module
+        Health = humanoid.Health,
+        MaxHealth = humanoid.MaxHealth,
         Drops = {},
         Resistances = {}
     }
