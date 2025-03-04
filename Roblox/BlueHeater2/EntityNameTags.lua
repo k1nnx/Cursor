@@ -27,7 +27,7 @@ local EntityInfo = _G.BlueHeaterAPI.EntityInfo
 -- Configuration
 local config = {
     updateInterval = 0.5, -- How often to update in seconds
-    tagHeight = 2.5, -- Height above the entity
+    tagHeight = 1.0, -- Height above the entity (reduced from 2.5)
     tagWidth = 120, -- Width of the tag
     tagHeight = 50, -- Height of the tag
     maxViewDistance = 100, -- Maximum distance to show tag
@@ -48,6 +48,8 @@ local config = {
     showLevel = true,
     showHealth = true,
     showResistances = false, -- Set to true to show resistances on the tag
+    debug = true, -- Enable debug output
+    requireHumanoidRootPart = true -- Only create tags for entities with HumanoidRootPart
 }
 
 -- Namespace
@@ -132,18 +134,35 @@ function NameTags:CreateNameTagForModel(model)
     
     -- Find the HumanoidRootPart or primary part to attach to
     local humanoid = model:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
+    if not humanoid then 
+        debugPrint("Skipping " .. model.Name .. " - No humanoid found")
+        return 
+    end
     
-    local attachPart = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model.PrimaryPart
+    -- Check for HumanoidRootPart
+    local attachPart = model:FindFirstChild("HumanoidRootPart")
+    if not attachPart and config.requireHumanoidRootPart then
+        debugPrint("Skipping " .. model.Name .. " - No HumanoidRootPart found and requireHumanoidRootPart is true")
+        return
+    end
+    
+    -- If we're allowed to use other parts and no HumanoidRootPart found
     if not attachPart then
-        for _, part in ipairs(model:GetChildren()) do
-            if part:IsA("BasePart") then
-                attachPart = part
-                break
+        attachPart = model:FindFirstChild("Head") or model.PrimaryPart
+        if not attachPart then
+            for _, part in ipairs(model:GetChildren()) do
+                if part:IsA("BasePart") then
+                    attachPart = part
+                    break
+                end
             end
         end
     end
-    if not attachPart then return end
+    
+    if not attachPart then
+        debugPrint("Skipping " .. model.Name .. " - No suitable attachment part found")
+        return
+    end
     
     -- Create entity data from model
     local entityData = {
@@ -180,7 +199,19 @@ function NameTags:CreateNameTagForModel(model)
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "EntityNameTag"
     billboard.Size = UDim2.new(0, config.tagWidth, 0, config.tagHeight)
-    billboard.StudsOffset = Vector3.new(0, config.tagHeight, 0)
+    
+    -- Add offset based on attachment part
+    if attachPart.Name == "HumanoidRootPart" then
+        -- Use the configured height for HumanoidRootPart
+        billboard.StudsOffset = Vector3.new(0, config.tagHeight, 0)
+    elseif attachPart.Name == "Head" then
+        -- For Head, use a smaller offset
+        billboard.StudsOffset = Vector3.new(0, 0.5, 0)
+    else
+        -- For other parts, adjust offset based on size
+        billboard.StudsOffset = Vector3.new(0, attachPart.Size.Y/2 + 0.5, 0)
+    end
+    
     billboard.AlwaysOnTop = true
     billboard.MaxDistance = config.maxViewDistance
     billboard.Adornee = attachPart
