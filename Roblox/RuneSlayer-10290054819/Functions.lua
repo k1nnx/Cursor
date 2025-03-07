@@ -1,10 +1,10 @@
 function getAlive()
+    local aliveTable = {}  -- Create a table to store results
     local alive = workspace:WaitForChild('Alive')
-    for _, alive in alive:GetChildren() do
-        if not game:GetService('Players'):GetPlayerFromCharacter(alive) then
-            table.insert(getAlive, alive)
+    for _, model in alive:GetChildren() do
+        if not game:GetService('Players'):GetPlayerFromCharacter(model) then
+            table.insert(aliveTable, model)
         end
     end
-    return getAlive
+    return aliveTable
 end
-
