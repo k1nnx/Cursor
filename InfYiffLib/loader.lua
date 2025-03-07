@@ -13,6 +13,7 @@ return [[
     local Players = game:GetService("Players")
     local CoreGui = game:GetService("CoreGui")
     local TweenService = game:GetService("TweenService")
+    local UserInputService = game:GetService("UserInputService")
 
     -- Constants
     local LIBRARY_VERSION = "1.0.0"
@@ -23,6 +24,40 @@ return [[
             return cloneref(o)
         end
         return o
+    end
+
+    -- Make frame draggable
+    local function makeDraggable(frame)
+        local dragToggle = nil
+        local dragSpeed = 0.1
+        local dragStart = nil
+        local startPos = nil
+
+        local function updateInput(input)
+            local delta = input.Position - dragStart
+            local position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            TweenService:Create(frame, TweenInfo.new(dragSpeed), {Position = position}):Play()
+        end
+
+        frame.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragToggle = true
+                dragStart = input.Position
+                startPos = frame.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        dragToggle = false
+                    end
+                end)
+            end
+        end)
+
+        UserInputService.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement and dragToggle then
+                updateInput(input)
+            end
+        end)
     end
 
     -- Main UI Components
@@ -54,10 +89,12 @@ return [[
         components.Holder.Position = UDim2.new(0.5, -200, 0.5, -135)
         components.Holder.Size = UDim2.new(0, 400, 0, 270)
         components.Holder.Parent = components.ScaledHolder
+        components.Holder.Active = true -- Make it interactive
 
-        -- Setup Title
+        -- Setup Title (now acts as drag handle)
         components.Title.Name = "Title"
-        components.Title.BackgroundTransparency = 1
+        components.Title.BackgroundColor3 = Color3.fromRGB(46, 46, 46)
+        components.Title.BackgroundTransparency = 0
         components.Title.Size = UDim2.new(1, 0, 0, 35)
         components.Title.Font = Enum.Font.SourceSansBold
         components.Title.Text = "InfYiffLib"
@@ -78,6 +115,9 @@ return [[
         components.ListLayout.Parent = components.ScrollFrame
         components.ListLayout.Padding = UDim.new(0, 5)
         components.ListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+        -- Make the UI draggable using the title bar
+        makeDraggable(components.Holder)
 
         return components
     end
@@ -100,6 +140,7 @@ return [[
         
         -- Parent the main UI to CoreGui
         self.components.ScaledHolder.Parent = CoreGui
+        self.components.ScaledHolder.Visible = true -- Make sure it's visible by default
         
         return self
     end
@@ -116,6 +157,19 @@ return [[
         button.TextColor3 = Color3.fromRGB(255, 255, 255)
         button.TextSize = 16
         button.Parent = self.components.ScrollFrame
+        
+        -- Add hover effect
+        button.MouseEnter:Connect(function()
+            TweenService:Create(button, TweenInfo.new(0.2), {
+                BackgroundColor3 = Color3.fromRGB(56, 56, 56)
+            }):Play()
+        end)
+        
+        button.MouseLeave:Connect(function()
+            TweenService:Create(button, TweenInfo.new(0.2), {
+                BackgroundColor3 = Color3.fromRGB(46, 46, 46)
+            }):Play()
+        end)
         
         button.MouseButton1Click:Connect(callback)
         return button
