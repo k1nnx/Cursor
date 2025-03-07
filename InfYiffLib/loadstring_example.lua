@@ -1,23 +1,56 @@
 -- Example of using InfYiffLib with loadstring
 
 -- Load the library directly (fixed version)
-local success, result = pcall(function()
+local function fetchAndLoadLibrary()
     local source = game:HttpGet('https://raw.githubusercontent.com/k1nnx/Cursor/refs/heads/main/InfYiffLib/loader.lua')
     print('Source loaded:', #source, 'bytes') -- Debug print
-    local lib = loadstring(source)
-    if not lib then error("Failed to compile library") end
-    return lib()
-end)
+    
+    -- First load and execute the loader
+    local loader = loadstring(source)
+    if not loader then
+        error('Failed to compile loader')
+    end
+    
+    -- Get the library source code
+    local librarySource = loader()
+    if type(librarySource) ~= "string" then
+        error('Loader did not return library source code')
+    end
+    
+    -- Now load and execute the actual library code
+    local library = loadstring(librarySource)
+    if not library then
+        error('Failed to compile library')
+    end
+    
+    -- Execute the library code
+    local result = library()
+    if not result or type(result) ~= "table" or not result.new then
+        error('Invalid library returned')
+    end
+    
+    return result
+end
+
+local success, Library = pcall(fetchAndLoadLibrary)
 
 if not success then
-    warn('Failed to load library:', result)
+    warn('Failed to load library:', Library)
     return
 end
 
-local Library = result
+print("Library loaded, type:", typeof(Library))
+print("Library.new exists:", Library.new ~= nil)
 
 -- Create a new UI instance
 local UI = Library.new()
+
+if not UI then
+    warn("UI creation failed!")
+    return
+end
+
+print("UI created successfully")
 
 -- Add some interactive buttons
 UI:AddButton('Click Me!', function()
