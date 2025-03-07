@@ -1,4 +1,3 @@
-return [[
 --[[
     InfYiffLib
     A modern UI Library for Roblox
@@ -131,5 +130,4 @@ function InfYiffLib:GetVersion()
     return LIBRARY_VERSION
 end
 
-return InfYiffLib
-]] 
+return InfYiffLib 
