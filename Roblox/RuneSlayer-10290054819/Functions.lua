@@ -44,4 +44,4 @@ function getMobInfo()
     return mobinfo
 end
 
-
+print("Functions loaded")
