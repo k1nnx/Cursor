@@ -43,5 +43,3 @@ function getMobInfo()
     end
     return mobinfo
 end
-
-print("Functions loaded")
