@@ -23,14 +23,16 @@ local Tab = TabsWindow:CreateTab({
 	Name="Mobs"
 })
 for _, name in getMob() do
-    local health = name.Humanoid.Health
-    local maxhealth = name.Humanoid.MaxHealth
     local List = Tab:TreeNode({
         Title = name.Name,
         NoAnimatio = false,
     })
+    local List2 = List:TreeNode({
+        Title = "Attributes",
+        NoAnimatio = false,
+    })
     for attributeName, attributeValue in pairs(name:GetAttributes()) do
-        List:Label({
+        List2:Label({
             Text = (attributeName .. ": " .. tostring(attributeValue))
         })
     end
